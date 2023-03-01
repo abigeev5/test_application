@@ -1,11 +1,10 @@
 import socket, serial
-import sys, glob
+import sys
 import threading
 import time
-import cv2
 
 class Scanner:
-    def __init__(self, ip, port, debug=False):
+    def __init__(self, ip=None, port=None, debug=False):
         self.debug = debug
         self.listeners = {}
         self.stop = False
@@ -83,7 +82,7 @@ class Scanner:
             if self.debug:
                 # print(f"[DEBUG] Scanner [{self.ip}]: {code}, {data}")
                 pass
-            time.sleep(5)
+            time.sleep(sleep)
 
 
 class Barcode_scanner:
