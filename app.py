@@ -7,7 +7,9 @@ import numpy as np
 import argparse
 import logging
 import sys, os
+import math
 import json
+import time
 import cv2
 
 from gui import Ui_MainWindow
@@ -23,8 +25,6 @@ class MainWindow(QtWidgets.QWidget, Ui_MainWindow):
         super().__init__(parent)
         self.setupUi(self)
         
-        self.initUi()
-        self.set_listeners()
         self.config = {
             "stream_stopped": False,
             "bar_scanner": False,
@@ -32,6 +32,10 @@ class MainWindow(QtWidgets.QWidget, Ui_MainWindow):
             "video_stream": False,
             "speed_x": 1
         }
+        
+        self.initUi()
+        self.set_listeners()
+        
         
         
     def initUi(self):
@@ -85,19 +89,22 @@ class MainWindow(QtWidgets.QWidget, Ui_MainWindow):
         self.pushButton_trajectory_execute.clicked.connect(self.move_traject)
         self.pushButton_set_settings.clicked.connect(self.update_settings)
         
-        self.pushButton_UpByZ.clicked.connect(lambda: self.Z_move(float(self.lineEdit_step_Z.value()), float(self.lineEdit_up_to_Z.text())))
-        self.pushButton_downByZ.clicked.connect(lambda: self.Z_move(float(self.lineEdit_step_Z.value()), -float(self.lineEdit_down_to_Z.text())))
+        self.pushButton_UpByZ.clicked.connect(lambda: self.command_execute(f"MOVE 0 0 -{self.lineEdit_up_to_Z.value()}\r"))
+        self.pushButton_downByZ.clicked.connect(lambda: self.Z_move(self.lineEdit_step_Z.value(), self.lineEdit_down_to_Z.text()))
         
         
     def command_execute(self, command):
-        global scanner
+        global scanner, logger
         
         if self.config["scanner_connected"]:
             self.listView_current_coordinate.addItem(f"[DEUBG] Send: {command}")
             response = scanner.send(command)
             self.listView_current_coordinate.addItem(f"[DEBUG] Response: {response[1]}")
+            logger.debug(f"[DEUBG] Send: {command}")
+            logger.debug(f"[DEBUG] Response: {response[1]}")
         else:
             self.listView_current_coordinate.addItem(f"[DEBUG] No connection")
+            logger.debug(f"[DEBUG] No connection")
     
     
     def stop_stream(self):
@@ -138,16 +145,24 @@ class MainWindow(QtWidgets.QWidget, Ui_MainWindow):
         if r[0] == -1:
             self.connect()
             return
-        data = json.loads(r[1].replace(b"OK GET_STATUS ", ""))
-        self.lineEdit_currentZ.setText(data["position"]["z"])        
+        data = str(r[1], encoding='utf-8')
+        if "coordinates" in data:
+            data = json.loads(data)
+            self.lineEdit_currentZ.setValue(data["coordinates"]["z"])        
         logger.debug("Status: OK")
     
     
     def Z_move(self, step, value):
-        for i in range(float(self.lineEdit_currentZ.text()), value, step):
-            self.command_execute(f"MOVE 0 0 {i}\r")
-            if self.checkBox_save_z_stack.isChecked():
-                self.save_image()
+        import time
+        start = int(float(str(self.lineEdit_currentZ.value()).replace(',', '.')))
+        end = int(float(str(value).replace(',', '.')))
+        step = int(float(str(step).replace(',', '.')))
+        for i in range(start, end, step * (step // abs(step))):
+            self.command_execute(f"MOVE 0 0 {step}\r")
+            time.sleep(1)
+            # if self.checkBox_save_z_stack.isChecked():
+            #    self.save_image()
+            
     
     
     def detect(self):
@@ -185,9 +200,11 @@ class MainWindow(QtWidgets.QWidget, Ui_MainWindow):
             with open(self.config["traject_path"], "r", encoding='utf-8') as fin:
                 for line in fin:
                     try:
-                        x, y, z = map(float, line[1:-2].split(','))
+                        x, y, z = map(float, line.split(','))
+                        print("MOVE", x, y, z)
                         self.command_execute(f"MOVE {x} {y} {z}\r")
                         self.listView_current_coordinate.addItem(f"[DEBUG] MOVE {x} {y} {z}")
+                        time.sleep(3)
                     except Exception as e:
                         logger.debug(e)
         else:
@@ -254,7 +271,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='Web server application', usage='test.py [options]')
     parser.add_argument('--debug', type=bool, default=True, help='Run application in debug mode')
     parser.add_argument('--host', type=str, default="169.254.180.246", help='Host serialization')
-    parser.add_argument('--port', type=int, default=5003, help='Port serialization')
+    parser.add_argument('--port', type=int, default=6003, help='Port serialization')
     args = vars(parser.parse_args())
     
     scanner = Scanner(ip=args["host"], port=args["port"])

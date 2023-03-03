@@ -185,7 +185,7 @@ class Ui_MainWindow(object):
         self.label_current_z = QtWidgets.QLabel(self.groupBox)
         self.label_current_z.setGeometry(QtCore.QRect(30, 30, 71, 16))
         self.label_current_z.setObjectName("label_current_z")
-        self.lineEdit_currentZ = QtWidgets.QLineEdit(self.groupBox)
+        self.lineEdit_currentZ = QtWidgets.QDoubleSpinBox(self.groupBox)
         self.lineEdit_currentZ.setGeometry(QtCore.QRect(30, 50, 61, 22))
         self.lineEdit_currentZ.setObjectName("lineEdit_currentZ")
         self.lineEdit_up_to_Z = QtWidgets.QDoubleSpinBox(self.groupBox)
