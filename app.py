@@ -11,8 +11,7 @@ import json
 import time
 import cv2
 
-# from gui import Ui_MainWindow
-from test import Ui_MainWindow
+from gui import Ui_MainWindow
 from utils import Scanner, Barcode_scanner
 from inference import Inference
 
@@ -254,7 +253,7 @@ if __name__ == "__main__":
     scanner = Scanner(ip=args["host"], port=args["port"])
     scanner_image = Scanner(ip=args["host"], port=args["port"] + 1)
     barcode_scanner = Barcode_scanner()
-    ie = Inference("model_v8l.pt")
+    ie = Inference("data/model_v8l.pt")
     
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
