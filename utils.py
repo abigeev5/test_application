@@ -30,8 +30,6 @@ class Scanner:
             data = self.recvall(4096 * 32)
             logging.debug(f"Recived {len(data)} bytes")
             return (0, data)
-            if self.debug:
-                print(f"[DEBUG] From hz: {data}")
             if data is None:
                 return (-1, data)
             else:
