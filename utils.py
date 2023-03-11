@@ -11,6 +11,7 @@ class Scanner:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.ip = ip
         self.port = port
+        self.data = b''
     
         
     def connect(self, ip, port):
@@ -28,7 +29,7 @@ class Scanner:
         if wait:
             # conn, addr = self.revicer.accept()
             data = self.recvall(4096 * 32)
-            logging.debug(f"Recived {len(data)} bytes")
+            logging.debug(f"Recieved {len(data)} bytes")
             return (0, data)
             if data is None:
                 return (-1, data)
@@ -43,12 +44,23 @@ class Scanner:
     
     
     def recvall(self, buffer=4096):
-        data = b""
         part = '0' * buffer
-        while len(part) >= buffer:
-            part = self.sock.recv(buffer)
-            data += part
-        return data
+        if self.port == 6003:
+            self.data = b""
+            while len(part) >= buffer:
+                part = self.sock.recv(buffer)
+                self.data += part
+            return self.data
+        else:
+            while self.data.find(b'start_image') == -1 or self.data.find(b'end_of_image') == -1 and not (self.data.find(b'end_of_image') > self.data.find(b'start_image')):
+                part = self.sock.recv(buffer)
+                self.data += part
+            start_position = self.data.find(b'start_image')
+            stop_position = self.data.find(b'end_of_image') + len(b'end_of_image')
+            print(start_position, stop_position)
+            data_to_return = self.data[start_position:stop_position]
+            self.data = self.data[stop_position:]
+            return data_to_return
 
 
     def start_listening(self, name, listener, command, sleep):

@@ -15,6 +15,7 @@ from gui import Ui_MainWindow
 from utils import Scanner, Barcode_scanner
 from inference import Inference
 
+logging.disable(logging.CRITICAL)
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     bar_signal = QtCore.pyqtSignal(str)
@@ -118,7 +119,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             
             scanner.stop_listening()
             scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 10)
-            scanner_image.start_listening("get_image", lambda r: self.video_signal.emit(r[1]), "GET_IMAGE\r", 2)
+            scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
+            # scanner_image.start_listening("get_image", lambda r: self.video_signal.emit(r[1]), "GET_IMAGE\r", 0.2)
         else:
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port}]: {message}")
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port + 1}]: {message1}")
@@ -134,6 +136,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if "coordinates" in data:
             data = json.loads(data)
             self.spinbox_current_Z.setValue(data["coordinates"]["z"])        
+        print("[STATUS]", r)
+        print("Status: OK")
         logger.debug("Status: OK")
     
     
@@ -198,10 +202,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     
     
     def update_settings(self):
-        self.command_execute("SET_GAMMA {}\r".format(self.spinbox_gamma.value()))
-        self.command_execute("SET_BRIGHTNESS {}\r".format(self.spinbox_brightness.value()))
-        self.command_execute("SET_EXPOSURE_TIME {}\r".format(self.spinbox_exposure_time.value()))
-        self.command_execute("SET_CONTRAST {}\r".format(self.spinbox_contrast.value()))
+        self.command_execute("SET_GAMMA {}\r".format(int(self.spinbox_gamma.value())))
+        self.command_execute("SET_BRIGHTNESS {}\r".format(int(self.spinbox_brightness.value())))
+        self.command_execute("SET_EXPOSURE_TIME {}\r".format(int(self.spinbox_exposure_time.value())))
+        self.command_execute("SET_CONTRAST {}\r".format(int(self.spinbox_contrast.value())))
+        self.command_execute("SET_RESOLUTION {}\r".format(int(self.spindbox_resolution.value())))
         
         
     def error_message(self, text):
@@ -235,29 +240,45 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         
         if not(self.config["stream_stopped"]):
             print("Input size", len(data))
-            debug_data = data.split(b'delimiter')
-            print("GOT {} TABS".format(len(debug_data)))
-            size = [int(x) for x in debug_data[0].decode().split('_')]
-            logger.debug(f"Image size: {size}")
+            start_position = data.find(b'start_image_')
+            stop_position =  data.find(b'end_of_image')
+            print("data has start {}".format(start_position))
+            print("data has stop {}".format(stop_position))
+            if start_position != -1 and start_position != -1 and (stop_position - start_position) > 0:
+                data = data.split(b'start_image_')[1].split(b'end_of_image')[0]
+                debug_data = data.split(b'delimiter')
+                print("GOT {} TABS".format(len(debug_data)))
+                size = [int(x) for x in debug_data[0].decode().split('_')]
+                logger.debug(f"Image size: {size}")
 
-            data = debug_data[1]
-            img = Image.frombytes('RGB', size, data)
-            image = np.asarray(img)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            image = cv2.rotate(image, cv2.ROTATE_180)
             
-            h, w, ch = image.shape
-            bytesPerLine = ch * w
-            try:
-                image = QtGui.QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
-                
-                self.Frame.setPixmap(QPixmap.fromImage(image))
-                self.Frame.adjustSize()
-                if kolkhoz:
-                    self.save_image()
-                    kolkhoz = False
-            except Exception as e:
-                logger.error(e)
+                data = debug_data[1].split(b'end_of_image')[0]
+                print("end of image{}".format(len(data)))
+	            
+                img = np.frombuffer(data, dtype = np.uint32)
+                raw = img.view(np.uint8).reshape(tuple(size) + (-1,))
+                bgr = raw[..., :3]
+                image = Image.fromarray(bgr, 'RGB')
+                b, g, r = image.split()
+                img = Image.merge('RGB', (r, g, b))
+                image = np.asarray(img)
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                image = cv2.rotate(image, cv2.ROTATE_180)
+	            
+                h, w, ch = image.shape
+                bytesPerLine = ch * w
+                try:
+                    image = QtGui.QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
+	                
+                    self.Frame.setPixmap(QPixmap.fromImage(image))
+                    self.Frame.adjustSize()
+                    if kolkhoz:
+                        self.save_image()
+                        kolkhoz = False
+                except Exception as e:
+                    logger.error(e)
+            else:
+                print("not full image")
 
 
 if __name__ == "__main__":
