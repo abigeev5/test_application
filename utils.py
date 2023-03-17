@@ -3,6 +3,7 @@ import time, glob, sys
 import threading
 import logging
 
+import config
 class Scanner:
     
     def __init__(self, ip=None, port=None):
@@ -12,6 +13,15 @@ class Scanner:
         self.ip = ip
         self.port = port
         self.data = b''
+    
+    
+    def shutdown(self):
+        self.sock.shutdown(socket.SHUT_RDWR)
+    
+    
+    def reconnect(self):
+        self.shutdown()
+        self.connect(self.ip, self.port)
     
         
     def connect(self, ip, port):
@@ -27,40 +37,31 @@ class Scanner:
     def send(self, message, wait=False):
         self.sock.send(bytes(message, encoding='utf-8'))
         if wait:
-            # conn, addr = self.revicer.accept()
             data = self.recvall(4096 * 32)
-            logging.debug(f"Recieved {len(data)} bytes")
+            logging.debug(f"Received {len(data)} bytes")
             return (0, data)
-            if data is None:
-                return (-1, data)
-            else:
-                if "FAIL" in data:
-                    return (1, data)
-                elif "OK" in data:
-                    return (0, data)
-                return (2, data)
         else:
             return (0, "")
     
     
-    def recvall(self, buffer=4096):
-        part = '0' * buffer
-        if self.port == 6003:
-            self.data = b""
-            while len(part) >= buffer:
-                part = self.sock.recv(buffer)
-                self.data += part
-            return self.data
-        else:
-            while self.data.find(b'start_image') == -1 or self.data.find(b'end_of_image') == -1 and not (self.data.find(b'end_of_image') > self.data.find(b'start_image')):
-                part = self.sock.recv(buffer)
-                self.data += part
-            start_position = self.data.find(b'start_image')
-            stop_position = self.data.find(b'end_of_image') + len(b'end_of_image')
-            print(start_position, stop_position)
-            data_to_return = self.data[start_position:stop_position]
-            self.data = self.data[stop_position:]
-            return data_to_return
+    def recvall(self, package_size=4096):
+        buffer = '0' * package_size
+        # if self.port == 6003:
+        #     self.data = b""
+        #     while len(buffer) >= package_size:
+        #         buffer = self.sock.recv(package_size)
+        #         self.data += buffer
+        #     return self.data
+        # else:
+        while (self.data.find(config.start_bytes) == -1) or (self.data.find(config.end_bytes) == -1) and not (self.data.find(config.end_bytes) > self.data.find(config.start_bytes)):
+            # buffer = self.sock.recv(package_size)
+            buffer = self.sock.recv(package_size)
+            self.data += buffer
+        start_pos = self.data.find(config.start_bytes)
+        stop_pos = self.data.find(config.end_bytes) + len(config.end_bytes)
+        data_to_return = self.data[start_pos:stop_pos]
+        self.data = self.data[stop_pos:]
+        return data_to_return
 
 
     def start_listening(self, name, listener, command, sleep):
