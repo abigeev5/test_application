@@ -14,10 +14,8 @@ import cv2
 from gui import Ui_MainWindow
 from utils import Scanner, Barcode_scanner
 from inference import Inference
-import config
 
-
-# logging.disable(logging.CRITICAL)
+logging.disable(logging.CRITICAL)
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     bar_signal = QtCore.pyqtSignal(str)
@@ -37,6 +35,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         
         self.initUi()
         self.set_listeners()
+        
         
         
     def initUi(self):
@@ -77,28 +76,21 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.button_save_camera.clicked.connect(self.update_settings)
         
         self.button_move_up_Z.clicked.connect(lambda: self.command_execute(f"MOVE 0 0 -{self.spinbox_move_up_Z.value()}\r"))
-        self.button_move_down_Z.clicked.connect(lambda: self.Z_move(self.spinbox_current_Z.value(), self.spinbox_step.value(), self.spinbox_move_down_Z.text()))
+        self.button_move_down_Z.clicked.connect(lambda: self.Z_move(self.spinbox_step.value(), self.spinbox_move_down_Z.text()))
         
         
     def command_execute(self, command):
-        global scanner
-        
+        global scanner, logger
+        logger.debug(f"[DEUBG] Try: {command}")
         if self.config["scanner_connected"]:
             self.listView_log.addItem(f"[DEUBG] Send: {command}")
             response = scanner.send(command)
-            if response[0] == 0:
-                self.listView_log.addItem(f"[DEBUG] Response [{response[0]}]: {response[1]}")
-                print(f"[DEUBG] Send: {command}")
-                print(f"[DEBUG] Response: {response[1]}")
-            else:
-                self.config["scanner_connected"] = False
-                scanner.shutdown()
-                
-                self.listView_log.addItem(f"[DEBUG] Disconnected")
-                print(f"[DEBUG] Disconnected")
+            self.listView_log.addItem(f"[DEBUG] Response: {response[1]}")
+            logger.debug(f"[DEUBG] Send: {command}")
+            logger.debug(f"[DEBUG] Response: {response[1]}")
         else:
             self.listView_log.addItem(f"[DEBUG] No connection")
-            print(f"[DEBUG] No connection")
+            logger.debug(f"[DEBUG] No connection")
     
     
     def stop_stream(self):
@@ -107,9 +99,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     
     
     def connect(self, from_ui=True):
-        global scanner, scanner_image
+        global scanner, scanner_image, logger
         
-        self.ratio_connect.click()
         (ip, port) = (None, None)
         (code1, message1) = (None, None)
         if from_ui:
@@ -128,39 +119,39 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             
             scanner.stop_listening()
             scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 10)
-            scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
-            
-            scanner_image.start_listening("get_image", lambda r: self.video_signal.emit(r[1]), "GET_IMAGE\r", 0.2)
+            # scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
+            scanner_image.start_listening("get_image", lambda r: self.video_signal.emit(r[1]), "GET_IMAGE\r", 1)
         else:
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port}]: {message}")
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port + 1}]: {message1}")
 
 
     def get_status(self, r):
-        try:
-            if r[0] == -1:
-                self.connect()
-                return
-            
-            data = str(r[1], encoding='utf-8')
-            if "coordinates" in data:
-                data = json.loads(data)
-                self.spinbox_current_Z.setValue(data["coordinates"]["z"])
-                
-                self.spinbox_currentX.setValue(data["coordinates"]["x"])
-                self.spinbox_currentY.setValue(data["coordinates"]["y"])
-                self.spinbox_currentZ.setValue(data["coordinates"]["z"])
-            print("[STATUS]", r)
-            print("Status: OK")
-        except Exception as e:
-        	print('[STATUS]', e)
+        global logger
+        
+        if r[0] == -1:
+            self.connect()
+            return
+        data = str(r[1], encoding='utf-8')
+        if "coordinates" in data:
+            data = json.loads(data)
+            self.spinbox_current_Z.setValue(data["coordinates"]["z"])        
+        print("[STATUS]", r)
+        print("Status: OK")
+        logger.debug("Status: OK")
     
     
-    def Z_move(self, start, end, step):
-        for i in np.arange(start, end, step * (step / abs(step))):
+    def Z_move(self, step, value):
+        global kolkhoz
+        
+        start = int(float(str(self.spinbox_current_Z.value()).replace(',', '.')))
+        end = int(float(str(value).replace(',', '.')))
+        step = int(float(str(step).replace(',', '.')))
+        for i in range(start, end, step * (step // abs(step))):
             self.command_execute(f"MOVE 0 0 {step}\r")
             if self.checkBox_save.isChecked():
                self.save_image()
+            
     
     
     def detect(self):
@@ -183,21 +174,29 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     
     
     def get_traject_file(self):
+        global logger
+        
         path = QtWidgets.QFileDialog.getOpenFileName(self, 'Open file', filter="Image files (*.csv *.txt)")
         self.config["traject_path"] = path[0]
-        print(f"{self.config['traject_path']} {path[0]}")
+        logger.debug(f"{self.config['traject_path']} {path[0]}")
     
     
     def move_traject(self):
+        global logger, kolkhoz
+        
         if os.path.exists(self.config["traject_path"]):
             with open(self.config["traject_path"], "r", encoding='utf-8') as fin:
                 for line in fin:
                     try:
                         x, y, z = map(float, line.split(','))
                         self.command_execute(f"MOVE {x} {y} {z}\r")
+                        kolkhoz = True
+                        while kolkhoz:
+                            print("Abra cadabra")
+                            time.sleep(0.5)
                         # time.sleep(3)
                     except Exception as e:
-                        print(e)
+                        logger.debug(e)
         else:
             self.error_message("Файл {} не существует".format(self.config["traject_path"]))
     
@@ -211,19 +210,22 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         
         
     def error_message(self, text):
-        logging.error(text)
+        global logger
+        logger.error(text)
         msgBox = QtWidgets.QMessageBox()
         msgBox.setIcon(QtWidgets.QMessageBox.Information)
         msgBox.setText(text)
         msgBox.setWindowTitle("Ошибка")
-        msgBox.exec()
+
+        returnValue = msgBox.exec()
     
     
     def save_image(self):
+        global logger
         date = datetime.now()
         folder = self.line_save_folder.text() if os.path.exists(self.line_save_folder.text()) else ""
         path = f"{folder}image_{self.line_qr.text()}_{date.hour}_{date.minute}_{date.second}.png"
-        print(path)
+        logger.debug(path)
         self.Frame.pixmap().save(path)
     
     
@@ -234,26 +236,32 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     
     @QtCore.pyqtSlot(bytes)
     def setImage(self, data):
+        global logger, kolkhoz
+        
         if not(self.config["stream_stopped"]):
             print("Input size", len(data))
-            start_position = data.find(config.start_bytes)
-            stop_position =  data.find(config.end_bytes)
+            start_position = data.find(b'start_image_')
+            stop_position =  data.find(b'end_of_image')
+            print("data has start {}".format(start_position))
+            print("data has stop {}".format(stop_position))
             if start_position != -1 and start_position != -1 and (stop_position - start_position) > 0:
-                # data = data.split(config.start_bytes)[1].split(config.end_bytes)[0]
-                data = data[start_position:stop_position]
-                debug_data = data.split(config.delimiter)
-                print(debug_data)
+                data = data.split(b'start_image_')[1].split(b'end_of_image')[0]
+                debug_data = data.split(b'delimiter')
+                print("GOT {} TABS".format(len(debug_data)))
                 size = [int(x) for x in debug_data[0].decode().split('_')]
-                logging.debug(f"Image size: {size}")
+                logger.debug(f"Image size: {size}")
 
-                data = debug_data[1].split(config.end_bytes)[0]
-                image = np.frombuffer(data, dtype=np.uint32)
-                # raw = img.view(np.uint8).reshape(tuple(size) + (-1,))
-                # bgr = raw[..., :3]
-                # image = Image.fromarray(bgr, 'RGB')[:,:,::-1]
-                # b, g, r = image.split()
-                # img = Image.merge('RGB', (r, g, b))
-                # image = np.asarray(img)
+            
+                data = debug_data[1].split(b'end_of_image')[0]
+                print("end of image{}".format(len(data)))
+	            
+                img = np.frombuffer(data, dtype = np.uint32)
+                raw = img.view(np.uint8).reshape(tuple(size) + (-1,))
+                bgr = raw[..., :3]
+                image = Image.fromarray(bgr, 'RGB')
+                b, g, r = image.split()
+                img = Image.merge('RGB', (r, g, b))
+                image = np.asarray(img)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 image = cv2.rotate(image, cv2.ROTATE_180)
 	            
@@ -264,16 +272,19 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 	                
                     self.Frame.setPixmap(QPixmap.fromImage(image))
                     self.Frame.adjustSize()
+                    if kolkhoz:
+                        self.save_image()
+                        kolkhoz = False
                 except Exception as e:
-                    logging.error(e)
+                    logger.error(e)
             else:
                 print("not full image")
 
-    def closeEvent(self, event):
-        os._exit(0)
 
 if __name__ == "__main__":
-    global barcode_scanner, scanner, scanner_image, ie
+    global barcode_scanner, scanner, scanner_image, ie, logger, kolkhoz
+    
+    kolkhoz = False
     
     parser = argparse.ArgumentParser(prog='Web server application', usage='test.py [options]')
     parser.add_argument('--debug', type=bool, default=True, help='Run application in debug mode')
@@ -286,10 +297,11 @@ if __name__ == "__main__":
     barcode_scanner = Barcode_scanner()
     ie = Inference("data/model_v8l.pt")
     
-    logging.basicConfig(level=logging.DEBUG)
-
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    logger.error("Test")
+    
     app = QtWidgets.QApplication(sys.argv)
-    app.aboutToQuit.connect(lambda: os._exit(0))
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
