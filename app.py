@@ -17,7 +17,7 @@ from inference import Inference
 import config
 
 
-# logging.disable(logging.CRITICAL)
+logging.disable(logging.CRITICAL)
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     bar_signal = QtCore.pyqtSignal(str)
@@ -130,7 +130,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 10)
             scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
             
-            scanner_image.start_listening("get_image", lambda r: self.video_signal.emit(r[1]), "GET_IMAGE\r", 0.2)
+            scanner_image.start_listening("get_image", lambda r: self.video_signal.emit(r[1]), "GET_IMAGE\r", 1)
         else:
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port}]: {message}")
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port + 1}]: {message1}")
@@ -153,9 +153,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             print("[STATUS]", r)
             print("Status: OK")
         except Exception as e:
-        	print('[STATUS]', e)
+            print('[STATUS]', e)
     
-    
+
     def Z_move(self, start, end, step):
         for i in np.arange(start, end, step * (step / abs(step))):
             self.command_execute(f"MOVE 0 0 {step}\r")
@@ -236,38 +236,32 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def setImage(self, data):
         if not(self.config["stream_stopped"]):
             print("Input size", len(data))
-            start_position = data.find(config.start_bytes)
-            stop_position =  data.find(config.end_bytes)
-            if start_position != -1 and start_position != -1 and (stop_position - start_position) > 0:
-                # data = data.split(config.start_bytes)[1].split(config.end_bytes)[0]
-                data = data[start_position:stop_position]
-                debug_data = data.split(config.delimiter)
-                print(debug_data)
-                size = [int(x) for x in debug_data[0].decode().split('_')]
-                logging.debug(f"Image size: {size}")
+            # start_position = data.find(config.start_bytes)
+            # stop_position =  data.find(config.end_bytes) 
+            # if start_position != -1 and stop_position != -1 and (stop_position - start_position) > 0:
+            #     data = data.split(config.start_bytes)[1].split(config.end_bytes)[0]
+            #     data = data[start_position:stop_position]
+            debug_data = data.split(config.delimiter)
+            size = [int(x) for x in debug_data[0].decode().split('_')]
+            logging.debug(f"Image size: {size}")
+            print(f"Image size: {size}")
+            image = np.frombuffer(debug_data[1], dtype=np.uint32)
+            image = image.view(np.uint8).reshape(tuple(size) + (-1,))
 
-                data = debug_data[1].split(config.end_bytes)[0]
-                image = np.frombuffer(data, dtype=np.uint32)
-                # raw = img.view(np.uint8).reshape(tuple(size) + (-1,))
-                # bgr = raw[..., :3]
-                # image = Image.fromarray(bgr, 'RGB')[:,:,::-1]
-                # b, g, r = image.split()
-                # img = Image.merge('RGB', (r, g, b))
-                # image = np.asarray(img)
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                image = cv2.rotate(image, cv2.ROTATE_180)
-	            
-                h, w, ch = image.shape
-                bytesPerLine = ch * w
-                try:
-                    image = QtGui.QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
-	                
-                    self.Frame.setPixmap(QPixmap.fromImage(image))
-                    self.Frame.adjustSize()
-                except Exception as e:
-                    logging.error(e)
-            else:
-                print("not full image")
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image = cv2.rotate(image, cv2.ROTATE_180)
+            
+            h, w, ch = image.shape
+            bytesPerLine = ch * w
+            try:
+                image = QtGui.QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
+                
+                self.Frame.setPixmap(QPixmap.fromImage(image))
+                self.Frame.adjustSize()
+            except Exception as e:
+                logging.error(e)
+            # else:
+            #     print("not full image")
 
     def closeEvent(self, event):
         os._exit(0)

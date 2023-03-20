@@ -54,13 +54,12 @@ class Scanner:
         #     return self.data
         # else:
         while (self.data.find(config.start_bytes) == -1) or (self.data.find(config.end_bytes) == -1) and not (self.data.find(config.end_bytes) > self.data.find(config.start_bytes)):
-            # buffer = self.sock.recv(package_size)
             buffer = self.sock.recv(package_size)
             self.data += buffer
-        start_pos = self.data.find(config.start_bytes)
-        stop_pos = self.data.find(config.end_bytes) + len(config.end_bytes)
+        start_pos = self.data.find(config.start_bytes) + len(config.start_bytes)
+        stop_pos = self.data.find(config.end_bytes)
         data_to_return = self.data[start_pos:stop_pos]
-        self.data = self.data[stop_pos:]
+        self.data = self.data[stop_pos + len(config.end_bytes):]
         return data_to_return
 
 
@@ -81,7 +80,7 @@ class Scanner:
         while not(self.stop):
             code, data = self.send(command, True)
             listener((code, data))
-            logging.debug(f"[DEBUG] Scanner [{self.ip}]: {code}, {data}")
+            logging.debug(f"[DEBUG] Scanner [{self.ip}]: {code}")
             time.sleep(sleep)
 
 
