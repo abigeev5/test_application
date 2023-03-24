@@ -78,7 +78,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.button_save_camera.clicked.connect(self.update_settings)
         
         self.button_move_up_Z.clicked.connect(lambda: self.command_execute(f"MOVE 0 0 -{self.spinbox_move_up_Z.value()}\r"))
-        self.button_move_down_Z.clicked.connect(lambda: self.Z_move(self.spinbox_current_Z.value(), self.spinbox_step.value(), self.spinbox_move_down_Z.text()))
+        self.button_move_down_Z.clicked.connect(lambda: self.Z_move(self.spinbox_current_Z.value(), self.spinbox_move_down_Z.value(), self.spinbox_step.value()))
         
         
     def command_execute(self, command):
@@ -128,17 +128,22 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.listView_log.addItem(f"[DEBUG] Successfully connected to [{ip}:{port}]")
             
             scanner.stop_listening()
-            scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 10)
-            scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
+            scanner_image.start_listening("get_image", lambda r: self.get_image(r), "GET_IMAGE\r", 1)
+            scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 2.651)
+            # scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
             
-            scanner_image.start_listening("get_image", lambda r: self.video_signal.emit(r[1]), "GET_IMAGE\r", 1)
         else:
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port}]: {message}")
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port + 1}]: {message1}")
 
-
+    def get_image(self, r):
+        print(r[0])
+        self.setImage(r[1])
+        # self.video_signal.emit(r[1])
+    
     def get_status(self, r):
         try:
+            print(r)
             if r[0] == -1:
                 self.connect()
                 return
@@ -158,13 +163,17 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     
 
     def Z_move(self, start, end, step):
-        for i in np.arange(start, end, step * (step / abs(step))):
+        end = start - end
+        for i in np.arange(min(start, end), max(start, end), step):
             self.command_execute(f"MOVE 0 0 {step}\r")
+            time.sleep(1)
             if self.checkBox_save.isChecked():
                 self.config["image_recived"] = False
                 self.config["save_image"] = True
                 while not(self.config["image_recived"]):
-                    pass
+                    #time.sleep(0.5)
+                    continue
+                
         self.config["image_recived"] = False
         self.config["save_image"] = False
     
@@ -201,10 +210,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     try:
                         x, y, z = map(float, line.split(','))
                         self.command_execute(f"MOVE {x} {y} {z}\r")
+                        if self.checkBox.isChecked():
+                            self.config["image_recived"] = False
+                            self.config["save_image"] = True
+                            while not(self.config["image_recived"]):
+                                #time.sleep(0.5)
+                                continue
                     except Exception as e:
                         print(e)
         else:
             self.error_message("Файл {} не существует".format(self.config["traject_path"]))
+        self.config["image_recived"] = False
+        self.config["save_image"] = False
     
     
     def update_settings(self):
@@ -240,17 +257,17 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def setImage(self, data):
         if not(self.config["stream_stopped"]):
             print("Input size", len(data))
-            debug_data = data.split(config.delimiter)
-            size = [int(x) for x in debug_data[0].decode().split('_')]
-            logging.debug(f"Image size: {size}")
-            print(f"Image size: {size}")
-            image = np.frombuffer(debug_data[1], dtype=np.uint32)
-            image = image.view(np.uint8).reshape(tuple(size) + (-1,))
-
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            image = cv2.rotate(image, cv2.ROTATE_180)
-            
             try:
+                debug_data = data.split(config.delimiter)
+                size = [int(x) for x in debug_data[0].decode().split('_')]
+                logging.debug(f"Image size: {size}")
+                # print(f"Image size: {size}")
+                image = np.frombuffer(debug_data[1], dtype=np.uint32)
+                image = image.view(np.uint8).reshape(tuple(size) + (-1,))
+
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                image = cv2.rotate(image, cv2.ROTATE_180)
+            
                 h, w, ch = image.shape
                 bytesPerLine = ch * w
                 image = QtGui.QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
