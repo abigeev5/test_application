@@ -32,7 +32,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             "bar_scanner": False,
             "scanner_connected": False,
             "video_stream": False,
-            "speed_x": 1
+            "image_recived": False,
+            "save_image": False
         }
         
         self.initUi()
@@ -88,7 +89,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             response = scanner.send(command)
             if response[0] == 0:
                 self.listView_log.addItem(f"[DEBUG] Response [{response[0]}]: {response[1]}")
-                print(f"[DEUBG] Send: {command}")
+                print(f"[DEBUG] Send: {command}")
                 print(f"[DEBUG] Response: {response[1]}")
             else:
                 self.config["scanner_connected"] = False
@@ -160,7 +161,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         for i in np.arange(start, end, step * (step / abs(step))):
             self.command_execute(f"MOVE 0 0 {step}\r")
             if self.checkBox_save.isChecked():
-               self.save_image()
+                self.config["image_recived"] = False
+                self.config["save_image"] = True
+                while not(self.config["image_recived"]):
+                    pass
+        self.config["image_recived"] = False
+        self.config["save_image"] = False
     
     
     def detect(self):
@@ -195,7 +201,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     try:
                         x, y, z = map(float, line.split(','))
                         self.command_execute(f"MOVE {x} {y} {z}\r")
-                        # time.sleep(3)
                     except Exception as e:
                         print(e)
         else:
@@ -223,7 +228,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         date = datetime.now()
         folder = self.line_save_folder.text() if os.path.exists(self.line_save_folder.text()) else ""
         path = f"{folder}image_{self.line_qr.text()}_{date.hour}_{date.minute}_{date.second}.png"
-        print(path)
         self.Frame.pixmap().save(path)
     
     
@@ -236,11 +240,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def setImage(self, data):
         if not(self.config["stream_stopped"]):
             print("Input size", len(data))
-            # start_position = data.find(config.start_bytes)
-            # stop_position =  data.find(config.end_bytes) 
-            # if start_position != -1 and stop_position != -1 and (stop_position - start_position) > 0:
-            #     data = data.split(config.start_bytes)[1].split(config.end_bytes)[0]
-            #     data = data[start_position:stop_position]
             debug_data = data.split(config.delimiter)
             size = [int(x) for x in debug_data[0].decode().split('_')]
             logging.debug(f"Image size: {size}")
@@ -251,17 +250,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             image = cv2.rotate(image, cv2.ROTATE_180)
             
-            h, w, ch = image.shape
-            bytesPerLine = ch * w
             try:
+                h, w, ch = image.shape
+                bytesPerLine = ch * w
                 image = QtGui.QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
                 
                 self.Frame.setPixmap(QPixmap.fromImage(image))
                 self.Frame.adjustSize()
+                if self.config["save_image"]:
+                    self.save_image()
+                    self.config["image_recived"] = True
             except Exception as e:
                 logging.error(e)
-            # else:
-            #     print("not full image")
 
     def closeEvent(self, event):
         os._exit(0)

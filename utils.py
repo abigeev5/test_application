@@ -46,13 +46,6 @@ class Scanner:
     
     def recvall(self, package_size=4096):
         buffer = '0' * package_size
-        # if self.port == 6003:
-        #     self.data = b""
-        #     while len(buffer) >= package_size:
-        #         buffer = self.sock.recv(package_size)
-        #         self.data += buffer
-        #     return self.data
-        # else:
         while (self.data.find(config.start_bytes) == -1) or (self.data.find(config.end_bytes) == -1) and not (self.data.find(config.end_bytes) > self.data.find(config.start_bytes)):
             buffer = self.sock.recv(package_size)
             self.data += buffer
