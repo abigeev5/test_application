@@ -139,7 +139,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def get_image(self, r):
         print(r[0])
         self.setImage(r[1])
-        # self.video_signal.emit(r[1])
     
     def get_status(self, r):
         try:
@@ -244,6 +243,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def save_image(self):
         date = datetime.now()
         folder = self.line_save_folder.text() if os.path.exists(self.line_save_folder.text()) else ""
+        if not os.path.exists(folder):
+            os.mkdir(folder)
         path = f"{folder}image_{self.line_qr.text()}_{date.hour}_{date.minute}_{date.second}.png"
         self.Frame.pixmap().save(path)
     

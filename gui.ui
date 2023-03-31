@@ -215,6 +215,16 @@
           </item>
           <item>
            <layout class="QGridLayout" name="gridLayout_2" rowstretch="1,0,0">
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_23">
+              <property name="text">
+               <string>Z</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
             <item row="0" column="0">
              <widget class="QLabel" name="label_21">
               <property name="text">
@@ -222,22 +232,6 @@
               </property>
               <property name="alignment">
                <set>Qt::AlignCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="1">
-             <widget class="QDoubleSpinBox" name="spinbox_currentX">
-              <property name="frame">
-               <bool>true</bool>
-              </property>
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-              <property name="minimum">
-               <double>-1000000.000000000000000</double>
-              </property>
-              <property name="maximum">
-               <double>1000000.000000000000000</double>
               </property>
              </widget>
             </item>
@@ -251,20 +245,13 @@
               </property>
              </widget>
             </item>
-            <item row="2" column="0">
-             <widget class="QLabel" name="label_23">
-              <property name="text">
-               <string>Z</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="1">
-             <widget class="QDoubleSpinBox" name="spinbox_currentY">
+            <item row="2" column="1">
+             <widget class="QDoubleSpinBox" name="spinbox_currentZ">
               <property name="readOnly">
                <bool>true</bool>
+              </property>
+              <property name="buttonSymbols">
+               <enum>QAbstractSpinBox::NoButtons</enum>
               </property>
               <property name="minimum">
                <double>-1000000.000000000000000</double>
@@ -274,10 +261,32 @@
               </property>
              </widget>
             </item>
-            <item row="2" column="1">
-             <widget class="QDoubleSpinBox" name="spinbox_currentZ">
+            <item row="1" column="1">
+             <widget class="QDoubleSpinBox" name="spinbox_currentY">
               <property name="readOnly">
                <bool>true</bool>
+              </property>
+              <property name="buttonSymbols">
+               <enum>QAbstractSpinBox::NoButtons</enum>
+              </property>
+              <property name="minimum">
+               <double>-1000000.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>1000000.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QDoubleSpinBox" name="spinbox_currentX">
+              <property name="frame">
+               <bool>true</bool>
+              </property>
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+              <property name="buttonSymbols">
+               <enum>QAbstractSpinBox::NoButtons</enum>
               </property>
               <property name="minimum">
                <double>-1000000.000000000000000</double>
@@ -542,7 +551,20 @@
            </widget>
           </item>
           <item row="1" column="0">
-           <widget class="QDoubleSpinBox" name="doubleSpinBox_7"/>
+           <widget class="QDoubleSpinBox" name="doubleSpinBox_7">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+            <property name="buttonSymbols">
+             <enum>QAbstractSpinBox::NoButtons</enum>
+            </property>
+            <property name="minimum">
+             <double>-100000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+           </widget>
           </item>
           <item row="0" column="1">
            <widget class="QLabel" name="label_14">
@@ -579,7 +601,7 @@
           <item row="0" column="1">
            <widget class="QPushButton" name="button_move_up_Z">
             <property name="text">
-             <string>Подняться по Z</string>
+             <string>Подняться по Z на</string>
             </property>
            </widget>
           </item>
@@ -607,7 +629,7 @@
           <item row="0" column="2">
            <widget class="QPushButton" name="button_move_down_Z">
             <property name="text">
-             <string>Спуситься по Z</string>
+             <string>Спуситься по Z до</string>
             </property>
            </widget>
           </item>
@@ -617,6 +639,18 @@
              <font>
               <pointsize>9</pointsize>
              </font>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+            <property name="buttonSymbols">
+             <enum>QAbstractSpinBox::NoButtons</enum>
+            </property>
+            <property name="minimum">
+             <double>-100000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
             </property>
            </widget>
           </item>
@@ -646,6 +680,27 @@
        <layout class="QHBoxLayout" name="horizontalLayout_13">
         <item>
          <layout class="QGridLayout" name="gridLayout_5">
+          <item row="1" column="3">
+           <widget class="QPushButton" name="button_start_traject">
+            <property name="text">
+             <string>Выполнить</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_10">
+            <property name="text">
+             <string>Загрузить файл</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QCheckBox" name="checkBox">
+            <property name="text">
+             <string>Сохранять изображения</string>
+            </property>
+           </widget>
+          </item>
           <item row="1" column="0">
            <widget class="QPushButton" name="button_load_traject">
             <property name="text">
@@ -668,7 +723,14 @@
            </widget>
           </item>
           <item row="1" column="2">
-           <widget class="QDoubleSpinBox" name="spinbox_traject_time"/>
+           <widget class="QDoubleSpinBox" name="spinbox_traject_time">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+            <property name="buttonSymbols">
+             <enum>QAbstractSpinBox::NoButtons</enum>
+            </property>
+           </widget>
           </item>
           <item row="1" column="1">
            <layout class="QHBoxLayout" name="horizontalLayout_16">
@@ -679,27 +741,6 @@
              <widget class="QDoubleSpinBox" name="spinbox_trajectY_speed"/>
             </item>
            </layout>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_10">
-            <property name="text">
-             <string>Загрузить файл</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QCheckBox" name="checkBox">
-            <property name="text">
-             <string>Схоранять изображения</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="3">
-           <widget class="QPushButton" name="button_start_traject">
-            <property name="text">
-             <string>Выполнить</string>
-            </property>
-           </widget>
           </item>
          </layout>
         </item>
