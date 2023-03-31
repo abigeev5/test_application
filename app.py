@@ -231,6 +231,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.command_execute("SET_EXPOSURE_TIME {}\r".format(int(self.spinbox_exposure_time.value())))
         self.command_execute("SET_CONTRAST {}\r".format(int(self.spinbox_contrast.value())))
         self.command_execute("SET_RESOLUTION {}\r".format(int(self.spindbox_resolution.value())))
+        self.command_execute("SET_HUE {}\r".format(int(self.spinbox_hue.value())))
+        self.command_execute("SET_TEMPERATURE_TINT {}\r".format(int(self.spinbox_imtemp.value())))
         
         
     def error_message(self, text):
