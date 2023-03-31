@@ -548,7 +548,7 @@ class Ui_MainWindow(object):
         self.checkBox_save.setText(_translate("MainWindow", "Сохранять изображения"))
         self.label_8.setText(_translate("MainWindow", "Текущая позиция"))
         self.label_9.setText(_translate("MainWindow", "Шаг"))
-        self.button_move_down_Z.setText(_translate("MainWindow", "Спуситься по Z до"))
+        self.button_move_down_Z.setText(_translate("MainWindow", "Спуситься по Z на"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_z_stacks), _translate("MainWindow", "Z-стеки"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_autofocus), _translate("MainWindow", "Автофокусировка"))
         self.button_start_traject.setText(_translate("MainWindow", "Выполнить"))

@@ -160,18 +160,20 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         except Exception as e:
             print('[STATUS]', e)
     
+    def wait_image(self):
+        self.config["image_recived"] = False
+        self.config["save_image"] = True
+        while not(self.config["image_recived"]):
+            #time.sleep(0.5)
+            continue
 
     def Z_move(self, start, end, step):
         end = start - end
+        self.wait_image()
         for i in np.arange(min(start, end), max(start, end), step):
             self.command_execute(f"MOVE 0 0 {step}\r")
             time.sleep(1)
-            if self.checkBox_save.isChecked():
-                self.config["image_recived"] = False
-                self.config["save_image"] = True
-                while not(self.config["image_recived"]):
-                    #time.sleep(0.5)
-                    continue
+            self.wait_image()
                 
         self.config["image_recived"] = False
         self.config["save_image"] = False
@@ -243,8 +245,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def save_image(self):
         date = datetime.now()
         folder = self.line_save_folder.text() if os.path.exists(self.line_save_folder.text()) else ""
-        if not os.path.exists(folder):
-            os.mkdir(folder)
+        # if not os.path.exists(folder):
+        #     os.mkdir(folder)
         path = f"{folder}image_{self.line_qr.text()}_{date.hour}_{date.minute}_{date.second}.png"
         self.Frame.pixmap().save(path)
     
@@ -262,7 +264,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 debug_data = data.split(config.delimiter)
                 size = [int(x) for x in debug_data[0].decode().split('_')]
                 logging.debug(f"Image size: {size}")
-                # print(f"Image size: {size}")
+                print(f"Image size: {size}")
                 image = np.frombuffer(debug_data[1], dtype=np.uint32)
                 image = image.view(np.uint8).reshape(tuple(size) + (-1,))
 

@@ -629,7 +629,7 @@
           <item row="0" column="2">
            <widget class="QPushButton" name="button_move_down_Z">
             <property name="text">
-             <string>Спуситься по Z до</string>
+             <string>Спуситься по Z на</string>
             </property>
            </widget>
           </item>
