@@ -58,7 +58,7 @@
            </font>
           </property>
           <property name="text">
-           <string>Папка сохранения</string>
+           <string>Папка сохранения:</string>
           </property>
          </widget>
         </item>
@@ -68,6 +68,16 @@
            <font>
             <pointsize>10</pointsize>
            </font>
+          </property>
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="button_select_folder">
+          <property name="text">
+           <string>Выбрать</string>
           </property>
          </widget>
         </item>
@@ -83,7 +93,7 @@
            </font>
           </property>
           <property name="text">
-           <string>IP сканера</string>
+           <string>IP сканера:</string>
           </property>
          </widget>
         </item>
@@ -108,7 +118,7 @@
            </font>
           </property>
           <property name="text">
-           <string>Штрих-код</string>
+           <string>Штрих-код:</string>
           </property>
          </widget>
         </item>
@@ -197,7 +207,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>6</number>
+       <number>4</number>
       </property>
       <widget class="QWidget" name="tab_movement">
        <attribute name="title">
@@ -680,24 +690,17 @@
        <layout class="QHBoxLayout" name="horizontalLayout_13">
         <item>
          <layout class="QGridLayout" name="gridLayout_5">
-          <item row="1" column="3">
-           <widget class="QPushButton" name="button_start_traject">
-            <property name="text">
-             <string>Выполнить</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_10">
-            <property name="text">
-             <string>Загрузить файл</string>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="3">
            <widget class="QCheckBox" name="checkBox">
             <property name="text">
              <string>Сохранять изображения</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QPushButton" name="button_start_traject">
+            <property name="text">
+             <string>Выполнить</string>
             </property>
            </widget>
           </item>
@@ -715,13 +718,6 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="2">
-           <widget class="QLabel" name="label_12">
-            <property name="text">
-             <string>Время перемещения</string>
-            </property>
-           </widget>
-          </item>
           <item row="1" column="2">
            <widget class="QDoubleSpinBox" name="spinbox_traject_time">
             <property name="readOnly">
@@ -729,6 +725,13 @@
             </property>
             <property name="buttonSymbols">
              <enum>QAbstractSpinBox::NoButtons</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QLabel" name="label_12">
+            <property name="text">
+             <string>Время перемещения</string>
             </property>
            </widget>
           </item>
@@ -741,6 +744,13 @@
              <widget class="QDoubleSpinBox" name="spinbox_trajectY_speed"/>
             </item>
            </layout>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_current_file">
+            <property name="text">
+             <string>Текущий файл: </string>
+            </property>
+           </widget>
           </item>
          </layout>
         </item>

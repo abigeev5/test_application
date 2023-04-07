@@ -5,6 +5,7 @@ from datetime import datetime
 from PIL import Image
 import numpy as np
 import argparse
+import threading
 import logging
 import sys, os
 import json
@@ -12,7 +13,8 @@ import time
 import cv2
 
 from gui import Ui_MainWindow
-from utils import Scanner, Barcode_scanner
+from scanner import Scanner
+from bscanner import Barcode_scanner
 from inference import Inference
 import config
 
@@ -32,7 +34,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             "bar_scanner": False,
             "scanner_connected": False,
             "video_stream": False,
-            "image_recived": False,
+            "image_received": False,
             "save_image": False
         }
         
@@ -62,18 +64,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.button_move_up.clicked.connect(lambda: self.command_execute(f"MOVE 0 0 -{self.spinbox_stepZ.value()}\r"))
         self.button_move_down.clicked.connect(lambda: self.command_execute(f"MOVE 0 0 {self.spinbox_stepZ.value()}\r"))
         
-        # self.pushButton_move_0.clicked.connect(lambda: self.command_execute("MOVE TO 0 0 0\r"))
-        # self.pushButton_move.clicked.connect(lambda: self.command_execute("MOVE TO {} {} {}\r".format(self.lineEdit_moveX.value() if self.radioButton_X.isChecked() else "0", 
-        #                                                                                                self.lineEdit_moveY.value() if self.radioButton_Y.isChecked() else "0",
-        #                                                                                                self.lineEdit_moveZ.value() if self.radioButton_Z.isChecked() else "0"
-        #                                                                                                )))
-        
         self.button_connect.clicked.connect(self.connect)
         
         self.button_stop.clicked.connect(self.stop_stream)
         self.button_detect.clicked.connect(self.detect)
         self.button_save_image.clicked.connect(self.save_image)
-        self.button_load_traject.clicked.connect(self.get_traject_file)
+        self.button_load_traject.clicked.connect(lambda: self.select_file('traject_path', "Image files (*.csv *.txt)", 'file', self.label_current_file))
+        self.button_select_folder.clicked.connect(lambda: self.select_file('save_path', "Select Folder", 'folder', self.line_save_folder))
         self.button_start_traject.clicked.connect(self.move_traject)
         self.button_save_camera.clicked.connect(self.update_settings)
         
@@ -110,7 +107,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def connect(self, from_ui=True):
         global scanner, scanner_image
         
-        self.ratio_connect.click()
         (ip, port) = (None, None)
         (code1, message1) = (None, None)
         if from_ui:
@@ -118,7 +114,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             (code, message) = scanner.connect(ip, int(port))
             (code1, message1) = scanner_image.connect(ip, int(port) + 1)
         else:
-            ip, port = scanner.ip, int(scanner.port)
+            ip, port = scanner.recv_ip, int(scanner.recv_port)
             self.line_scanner_ip.setText(f"{ip}:{port}")
             (code, message) = scanner.connect(ip, port)
             (code1, message1) = scanner_image.connect(ip, port + 1)
@@ -128,26 +124,28 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.listView_log.addItem(f"[DEBUG] Successfully connected to [{ip}:{port}]")
             
             scanner.stop_listening()
-            scanner_image.start_listening("get_image", lambda r: self.get_image(r), "GET_IMAGE\r", 1)
-            scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 2.651)
+            scanner_image.start_listening("get_image", lambda r: self.get_image(r), "GET_IMAGE\r", 0.3)
+            scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 0.1)
+            self.ratio_connect.click()
             # scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
-            
         else:
+            self.config["scanner_connected"] = False
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port}]: {message}")
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port + 1}]: {message1}")
 
     def get_image(self, r):
-        print(r[0])
+        rc, data = r
+        print(f"[IMAGE]: ({rc}): {len(data)} bytes")
         self.setImage(r[1])
     
     def get_status(self, r):
         try:
-            print(r)
-            if r[0] == -1:
+            rc, data = r
+            if rc == -1:
                 self.connect()
                 return
             
-            data = str(r[1], encoding='utf-8')
+            data = str(data, encoding='utf-8')
             if "coordinates" in data:
                 data = json.loads(data)
                 self.spinbox_current_Z.setValue(data["coordinates"]["z"])
@@ -156,27 +154,27 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.spinbox_currentY.setValue(data["coordinates"]["y"])
                 self.spinbox_currentZ.setValue(data["coordinates"]["z"])
             print("[STATUS]", r)
-            print("Status: OK")
         except Exception as e:
             print('[STATUS]', e)
     
     def wait_image(self):
-        self.config["image_recived"] = False
+        self.config["image_received"] = False
         self.config["save_image"] = True
-        while not(self.config["image_recived"]):
-            #time.sleep(0.5)
+        while not(self.config["image_received"]):
             continue
 
     def Z_move(self, start, end, step):
-        end = start - end
-        self.wait_image()
-        for i in np.arange(min(start, end), max(start, end), step):
-            self.command_execute(f"MOVE 0 0 {step}\r")
-            time.sleep(1)
+        def task():
+            end = start - end
             self.wait_image()
-                
-        self.config["image_recived"] = False
-        self.config["save_image"] = False
+            for i in np.arange(min(start, end), max(start, end), step):
+                self.command_execute(f"MOVE 0 0 {step}\r")
+                time.sleep(0.3)
+                self.wait_image()
+                    
+            self.config["image_received"] = False
+            self.config["save_image"] = False
+        threading.Thread(target=task).run()
     
     
     def detect(self):
@@ -198,30 +196,40 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         os.remove("temp.png")
     
     
-    def get_traject_file(self):
-        path = QtWidgets.QFileDialog.getOpenFileName(self, 'Open file', filter="Image files (*.csv *.txt)")
-        self.config["traject_path"] = path[0]
-        print(f"{self.config['traject_path']} {path[0]}")
+    def select_file(self, key, filter, type='file', label_out=None):
+        if type == 'file':
+            path = QtWidgets.QFileDialog.getOpenFileName(self, 'Open file', filter=filter)[0]
+        elif type == 'folder':
+            path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
+        self.config[key] = path
+        if label_out != None:
+            label_out.setText(self.config[key])
+        print(f"path: {self.config[key]}")
     
     
     def move_traject(self):
         if os.path.exists(self.config["traject_path"]):
-            with open(self.config["traject_path"], "r", encoding='utf-8') as fin:
-                for line in fin:
-                    try:
-                        x, y, z = map(float, line.split(','))
-                        self.command_execute(f"MOVE {x} {y} {z}\r")
-                        if self.checkBox.isChecked():
-                            self.config["image_recived"] = False
-                            self.config["save_image"] = True
-                            while not(self.config["image_recived"]):
-                                #time.sleep(0.5)
-                                continue
-                    except Exception as e:
-                        print(e)
+            def task():
+                start = time.time()
+                with open(self.config["traject_path"], "r", encoding='utf-8') as fin:
+                    for line in fin:
+                        try:
+                            x, y, z = map(float, line.split(','))
+                            self.command_execute(f"MOVE {x} {y} {z}\r")
+                            if self.checkBox.isChecked():
+                                self.config["image_received"] = False
+                                self.config["save_image"] = True
+                                while not(self.config["image_received"]):
+                                    pass
+                        except Exception as e:
+                            print(e)
+                elapsed = time.time() - start
+                logging.debug("Traject elapsed:", elapsed)
+                self.spinbox_traject_time.setValue(elapsed)
+            threading.Thread(target=task).run()
         else:
             self.error_message("Файл {} не существует".format(self.config["traject_path"]))
-        self.config["image_recived"] = False
+        self.config["image_received"] = False
         self.config["save_image"] = False
     
     
@@ -246,10 +254,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     
     def save_image(self):
         date = datetime.now()
-        folder = self.line_save_folder.text() if os.path.exists(self.line_save_folder.text()) else ""
-        # if not os.path.exists(folder):
-        #     os.mkdir(folder)
-        path = f"{folder}image_{self.line_qr.text()}_{date.hour}_{date.minute}_{date.second}.png"
+        folder = self.config.get("save_path", "") if os.path.exists(self.config.get("save_path", "")) else ""
+        path = f"{folder}/image_{self.line_qr.text()}_{date.hour:02d}_{date.minute:02d}_{date.second:02d}.png"
         self.Frame.pixmap().save(path)
     
     
@@ -281,7 +287,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.Frame.adjustSize()
                 if self.config["save_image"]:
                     self.save_image()
-                    self.config["image_recived"] = True
+                    self.config["image_received"] = True
             except Exception as e:
                 logging.error(e)
 
@@ -297,8 +303,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6003, help='Port serialization')
     args = vars(parser.parse_args())
     
-    scanner = Scanner(ip=args["host"], port=args["port"])
-    scanner_image = Scanner(ip=args["host"], port=args["port"] + 1)
+    scanner = Scanner(protocol='TCP', dst_ip=args["host"], dst_port=args["port"])
+    scanner_image = Scanner(protocol='TCP', dst_ip=args["host"], dst_port=args["port"] + 1)
     barcode_scanner = Barcode_scanner()
     ie = Inference("data/model_v8l.pt")
     
