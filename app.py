@@ -114,7 +114,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             (code, message) = scanner.connect(ip, int(port))
             (code1, message1) = scanner_image.connect(ip, int(port) + 1)
         else:
-            ip, port = scanner.recv_ip, int(scanner.recv_port)
+            ip, port = scanner.ip, int(scanner.port)
             self.line_scanner_ip.setText(f"{ip}:{port}")
             (code, message) = scanner.connect(ip, port)
             (code1, message1) = scanner_image.connect(ip, port + 1)
@@ -124,8 +124,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.listView_log.addItem(f"[DEBUG] Successfully connected to [{ip}:{port}]")
             
             scanner.stop_listening()
-            scanner_image.start_listening("get_image", lambda r: self.get_image(r), "GET_IMAGE\r", 0.3)
-            scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 0.1)
+            scanner_image.start_listening("get_image", lambda r: self.get_image(r), "GET_IMAGE\r", 0)
+            scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 1)
             self.ratio_connect.click()
             # scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
         else:
@@ -242,7 +242,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.command_execute("SET_HUE {}\r".format(int(self.spinbox_hue.value())))
         self.command_execute("SET_TEMPERATURE_TINT {}\r".format(int(self.spinbox_imtemp.value())))
         
-        
     def error_message(self, text):
         logging.error(text)
         msgBox = QtWidgets.QMessageBox()
@@ -303,8 +302,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6003, help='Port serialization')
     args = vars(parser.parse_args())
     
-    scanner = Scanner(protocol='TCP', dst_ip=args["host"], dst_port=args["port"])
-    scanner_image = Scanner(protocol='TCP', dst_ip=args["host"], dst_port=args["port"] + 1)
+    scanner = Scanner(ip=args["host"], port=args["port"])
+    scanner_image = Scanner(ip=args["host"], port=args["port"] + 1)
     barcode_scanner = Barcode_scanner()
     ie = Inference("data/model_v8l.pt")
     

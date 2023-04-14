@@ -8,85 +8,52 @@ import config
 
 class Scanner:
     
-    def __init__(self, protocol, ip=None, port=None, dst_ip=None, dst_port=None):
+    def __init__(self, ip=None, port=None):
         self.listeners = {}
         self.stop = False
-        self.protocol = protocol
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.ip = ip
         self.port = port
-        self.recv_ip = dst_ip
-        self.recv_port = dst_port
-        self.status = False
-        try:
-            if self.protocol == 'TCP':
-                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.data = b''
-            elif self.protocol == 'UDP':
-                self.sock = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-                self.sock.bind((self.ip, self.port))
-            else:
-                raise ValueError
-            self.status = True
-        except Exception as e:
-            logging.error("Connection error:", e)
-            raise ConnectionError
+        self.data = b''
     
     
     def shutdown(self):
-        self.status = False
-        self.sock.close()
         self.sock.shutdown(socket.SHUT_RDWR)
     
     
     def reconnect(self):
         self.shutdown()
         self.connect(self.ip, self.port)
-        
+    
         
     def connect(self, ip, port):
         try:
-            self.recv_ip = ip
-            self.recv_port = port
-            if self.protocol == 'TCP':
-                self.sock.connect((ip, port))
-            elif self.protocol == 'UDP':
-                pass
-            self.status = True
+            self.sock.connect((ip, port))
+            self.ip = ip
+            self.port = port
             return (0, "OK")
         except Exception as e:
             return (-1, e)
     
         
     def send(self, message, wait=False):
-        try:
-            if self.protocol == 'TCP':
-                self.sock.send(bytes(message, encoding='utf-8'))
-                if wait:
-                    data = ''
-                    while data == '':
-                        data = self.recvall()
-                    logging.debug(f"Received {len(data)} bytes")
-                return (0, data)
-            elif self.protocol == 'UDP':
-                self.sock.sendto(bytes(message, encoding='utf-8'), (self.recv_ip, self.recv_port))
+        self.sock.send(bytes(message, encoding='utf-8'))
+        if wait:
+            data = self.recvall(4 * 1024 * 1024)
+            logging.debug(f"Received {len(data)} bytes")
+            return (0, data)
+        else:
             return (0, "")
-        except Exception as e:
-            self.stop_listening()
-            self.reconnect()
-            return (-1, e)
     
     
-    def recvall(self):
-        buffer = ''
+    def recvall(self, package_size=4096):
+        buffer = '0' * package_size
         while (self.data.find(config.start_bytes) == -1) or (self.data.find(config.end_bytes) == -1) and not (self.data.find(config.end_bytes) > self.data.find(config.start_bytes)):
-            if self.protocol == 'TCP':
-                buffer = self.sock.recv()
-            elif self.protocol == 'UDP':
-                buffer, addr = self.sock.recvfrom(65527)
+            buffer = self.sock.recv(package_size)
             self.data += buffer
         start_pos = self.data.find(config.start_bytes) + len(config.start_bytes)
         stop_pos = self.data.find(config.end_bytes)
-        data_to_return = self.data[start_pos:stop_pos].replace(config.start_bytes, '').replace(config.end_bytes, '')
+        data_to_return = self.data[start_pos:stop_pos]
         self.data = self.data[stop_pos + len(config.end_bytes):]
         return data_to_return
 
@@ -99,11 +66,13 @@ class Scanner:
     
     def stop_listening(self):
         self.stop = True
+        # if name in self.listeners:
+        #    self.listeners[name].stop()
     
     
-    def listen(self, listener, command, sleep=1):
-        logging.debug(f"Start listening scanner {self.ip}:{self.port}")
-        while not(self.stop) or not(self.status):
+    def listen(self, listener, command, sleep=10):
+        logging.debug("Start listening scanner {self.ip}:{self.port}")
+        while not(self.stop):
             code, data = self.send(command, True)
             listener((code, data))
             logging.debug(f"[DEBUG] Scanner [{self.ip}]: {code}")
