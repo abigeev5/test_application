@@ -42,8 +42,8 @@ class VideoThread(QThread):
 
     def listener(self, data):
         try:
-            debug_data = data.split(config.delimiter)
-            size = [int(x) for x in debug_data[0].decode().split('_')]
+            debug_data = data.split(config.delimiter)[0].decode()
+            size = map(int, debug_data.split("_"))
             print(f"Image size: {size}")
             image = np.frombuffer(debug_data[1], dtype=np.uint32)
             image = image.view(np.uint8).reshape(tuple(size) + (-1,))
