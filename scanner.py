@@ -39,23 +39,31 @@ class Scanner:
     def send(self, message, wait=False):
         self.sock.send(bytes(message, encoding='utf-8'))
         if wait:
-            data = self.recvall(4 * 1024 * 1024)
-            logging.debug(f"Received {len(data)} bytes")
-            return (0, data)
+            try:
+                data = self.recvall(4 * 1024 * 1024)
+                logging.debug(f"Received {len(data)} bytes")
+                return (0, data)
+            except Exception as e:
+                print("Error", e)
+                return (0, "")
         else:
             return (0, "")
     
     
     def recvall(self, package_size=4096):
-        buffer = '0' * package_size
-        while (self.data.find(config.start_bytes) == -1) or (self.data.find(config.end_bytes) == -1) and not (self.data.find(config.end_bytes) > self.data.find(config.start_bytes)):
-            buffer = self.sock.recv(package_size)
-            self.data += buffer
-        start_pos = self.data.find(config.start_bytes) + len(config.start_bytes)
-        stop_pos = self.data.find(config.end_bytes)
-        data_to_return = self.data[start_pos:stop_pos]
-        self.data = self.data[stop_pos + len(config.end_bytes):]
-        return data_to_return
+        try:
+            buffer = '0' * package_size
+            while (self.data.find(config.start_bytes) == -1) or (self.data.find(config.end_bytes) == -1) and not (self.data.find(config.end_bytes) > self.data.find(config.start_bytes)):
+                buffer = self.sock.recv(package_size)
+                self.data += buffer
+            start_pos = self.data.find(config.start_bytes) + len(config.start_bytes)
+            stop_pos = self.data.find(config.end_bytes)
+            data_to_return = self.data[start_pos:stop_pos]
+            self.data = self.data[stop_pos + len(config.end_bytes):]
+            return data_to_return
+        except Exception as e:
+            print("Error", e)
+            return (0, "")
 
 
     def start_listening(self, name, listener, command, sleep):
@@ -71,9 +79,13 @@ class Scanner:
     
     
     def listen(self, listener, command, sleep=10):
-        logging.debug("Start listening scanner {self.ip}:{self.port}")
-        while not(self.stop):
-            code, data = self.send(command, True)
-            listener((code, data))
-            logging.debug(f"[DEBUG] Scanner [{self.ip}]: {code}")
-            time.sleep(sleep)
+        try:
+            logging.debug(f"Start listening scanner {self.ip}:{self.port}")
+            while not(self.stop):
+                code, data = self.send(command, True)
+                listener((code, data))
+                logging.debug(f"[DEBUG] Scanner [{self.ip}]: {code}")
+                time.sleep(sleep)
+        except Exception as e:
+            print("Error", e)
+            return (0, "")

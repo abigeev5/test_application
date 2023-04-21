@@ -2,9 +2,9 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from PyQt6.QtWidgets import *
+from PyQt6 import QtTest
 
 from datetime import datetime
-from PIL import Image
 import numpy as np
 import argparse
 import threading
@@ -42,25 +42,26 @@ class VideoThread(QThread):
 
     def listener(self, data):
         try:
-            debug_data = data.split(config.delimiter)[0].decode()
-            size = map(int, debug_data.split("_"))
-            print(f"Image size: {size}")
-            image = np.frombuffer(debug_data[1], dtype=np.uint32)
-            image = image.view(np.uint8).reshape(tuple(size) + (-1,))
+            if len(data) > 0:
+                debug_data = data.split(config.delimiter)
+                size = [int(x) for x in debug_data[0].decode().split('_')]
+                image = np.frombuffer(debug_data[1], dtype=np.uint32)
+                image = image.view(np.uint8).reshape(tuple(size) + (-1,))
 
-            image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-            image = cv2.rotate(image, cv2.ROTATE_180)
-        
-            h, w, ch = image.shape
-            bytesPerLine = ch * w
-            image = QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
-            self.signal.emit(image)
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+                # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                image = cv2.rotate(image, cv2.ROTATE_180)
+            
+                h, w, ch = image.shape
+                bytesPerLine = ch * w
+                self.image = QImage(image.data, w, h, bytesPerLine, QImage.Format.Format_RGB888).copy()
+                self.signal.emit(self.image)
         except Exception as e:
-            print(e)
+            print('[Video]', e)
         
     def run(self):
         try:
-            self.scanner.connect(self.ip, self.port)
+            # self.scanner.connect(self.ip, self.port)
             self.stop = False
             while not(self.stop):
                 code, data = self.scanner.send("GET_IMAGE\r", True)
@@ -124,12 +125,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.button_move_up_Z.clicked.connect(lambda: self.command_execute(f"MOVE 0 0 -{self.spinbox_move_up_Z.value()}\r"))
         self.button_move_down_Z.clicked.connect(lambda: self.Z_move(self.spinbox_current_Z.value(), self.spinbox_move_down_Z.value(), self.spinbox_step.value()))
             
-    def command_execute(self, command):
+    def command_execute(self, command, wait=False):
         global scanner
         
         if self.config["scanner_connected"]:
             self.listView_log.addItem(f"[DEUBG] Send: {command}")
-            response = scanner.send(command)
+            response = scanner.send(command, wait)
             if response[0] == 0:
                 self.listView_log.addItem(f"[DEBUG] Response [{response[0]}]: {response[1]}")
                 print(f"[DEBUG] Send: {command}")
@@ -181,11 +182,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     @pyqtSlot(QImage)
     def update_image(self, image):
         if not(self.config["stream_stopped"]):
-            self.Frame.setPixmap(QPixmap.fromImage(image))
-            self.Frame.adjustSize()
-            if self.config["save_image"]:
-                self.save_image()
-                self.config["image_received"] = True
+            try:
+                self._img = QtGui.QImage(image).copy()
+                self._pix = QtGui.QPixmap.fromImage(self._img)
+                self.Frame.setPixmap(self._pix)
+                QtGui.QGuiApplication.processEvents()
+                if self.config["save_image"]:
+                    self.save_image()
+                    self.config["image_received"] = True
+            except Exception as e:
+                print('[GET_IMAGE]', e)
         
     def stop_stream(self):
         self.config["stream_stopped"] = not(self.config["stream_stopped"])
@@ -194,14 +200,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def save_image(self):
         date = datetime.now()
         folder = self.config.get("save_path", "") if os.path.exists(self.config.get("save_path", "")) else ""
-        path = f"{folder}/image_{self.line_qr.text()}_{date.hour:02d}_{date.minute:02d}_{date.second:02d}.png"
+        path = f"{folder}/image_{self.config.get('image_prefix', '')}_{self.line_qr.text()}_{date.hour:02d}_{date.minute:02d}_{date.second:02d}.png"
         self.Frame.pixmap().save(path)
     
     def wait_image(self):
         self.config["image_received"] = False
         self.config["save_image"] = True
         while not(self.config["image_received"]):
-            continue
+            QtTest.QTest.qWait(0.01)
     
     def get_status(self, r):
         try:
@@ -228,6 +234,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.wait_image()
             for i in np.arange(min(start, end2), max(start, end2), step):
                 self.command_execute(f"MOVE 0 0 {step}\r")
+                self.config["image_prefix"] = str(i + 1)
                 self.wait_image()
             self.config["image_received"] = False
             self.config["save_image"] = False
@@ -266,24 +273,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     
     def move_traject(self):
         if os.path.exists(self.config["traject_path"]):
-            def task():
-                start = time.time()
-                with open(self.config["traject_path"], "r", encoding='utf-8') as fin:
-                    for line in fin:
-                        try:
-                            x, y, z = map(float, line.split(','))
-                            self.command_execute(f"MOVE {x} {y} {z}\r")
-                            if self.checkBox.isChecked():
-                                self.config["image_received"] = False
-                                self.config["save_image"] = True
-                                while not(self.config["image_received"]):
-                                    pass
-                        except Exception as e:
-                            print(e)
-                elapsed = time.time() - start
-                logging.debug("Traject elapsed:", elapsed)
-                self.spinbox_traject_time.setValue(elapsed)
-            threading.Thread(target=task).run()
+            start = time.time()
+            with open(self.config["traject_path"], "r", encoding='utf-8') as fin:
+                for idx, line in enumerate(fin):
+                    try:
+                        x, y, z = map(float, line.split(','))
+                        rc = self.command_execute(f"MOVE {x} {y} {z}\r", True)
+                        if self.checkBox.isChecked():
+                            self.config["image_prefix"] = str(idx + 1)
+                            QtTest.QTest.qWait(0.3)
+                            # QtTest.QTest.qWait((x + y + z) / 10)
+                            self.wait_image()
+                    except Exception as e:
+                        print(e)
+            elapsed = time.time() - start
+            logging.debug("Traject elapsed:", elapsed)
+            self.spinbox_traject_time.setValue(elapsed)
         else:
             self.error_message("Файл {} не существует".format(self.config["traject_path"]))
         self.config["image_received"] = False
