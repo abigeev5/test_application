@@ -1,5 +1,7 @@
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtGui import QPixmap
+from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
+from PyQt6.QtWidgets import *
 
 from datetime import datetime
 from PIL import Image
@@ -21,9 +23,54 @@ import config
 
 logging.disable(logging.CRITICAL)
 
-class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
+
+class VideoThread(QThread):
+    signal = pyqtSignal(QImage)
+    
+    def __init__(self, ip, port):
+        super(VideoThread, self).__init__()
+        self.ip = ip
+        self.port = port
+        self.scanner = Scanner(ip=ip, port=port)
+        self.stop = False
+
+    def stop(self):
+        self.stop = True
+        
+    def connect(self, ip, port):
+        return self.scanner.connect(ip, port)
+
+    def listener(self, data):
+        try:
+            debug_data = data.split(config.delimiter)
+            size = [int(x) for x in debug_data[0].decode().split('_')]
+            print(f"Image size: {size}")
+            image = np.frombuffer(debug_data[1], dtype=np.uint32)
+            image = image.view(np.uint8).reshape(tuple(size) + (-1,))
+
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+            image = cv2.rotate(image, cv2.ROTATE_180)
+        
+            h, w, ch = image.shape
+            bytesPerLine = ch * w
+            image = QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
+            self.signal.emit(image)
+        except Exception as e:
+            print(e)
+        
+    def run(self):
+        try:
+            self.scanner.connect(self.ip, self.port)
+            self.stop = False
+            while not(self.stop):
+                code, data = self.scanner.send("GET_IMAGE\r", True)
+                self.listener(data)
+        except Exception as e:
+            print(e)
+            
+
+class MainWindow(QMainWindow, Ui_MainWindow):
     bar_signal = QtCore.pyqtSignal(str)
-    video_signal = QtCore.pyqtSignal(bytes)
     
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -45,15 +92,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def initUi(self):
         self.retranslateUi(self)
         self.tabWidget.setCurrentIndex(0)
-        QtCore.QMetaObject.connectSlotsByName(self)
+        QMetaObject.connectSlotsByName(self)
         
-        
+        self.setupVideo()
+    
     def set_listeners(self):
         global barcode_scanner, scanner
         
         self.connect(False)
         self.bar_signal.connect(self.set_value)
-        self.video_signal.connect(self.setImage)
         
         barcode_scanner.start_listening("bar1", lambda x: self.bar_signal.emit(str(x, encoding='utf-8')))
         
@@ -76,8 +123,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         
         self.button_move_up_Z.clicked.connect(lambda: self.command_execute(f"MOVE 0 0 -{self.spinbox_move_up_Z.value()}\r"))
         self.button_move_down_Z.clicked.connect(lambda: self.Z_move(self.spinbox_current_Z.value(), self.spinbox_move_down_Z.value(), self.spinbox_step.value()))
-        
-        
+            
     def command_execute(self, command):
         global scanner
         
@@ -98,33 +144,27 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.listView_log.addItem(f"[DEBUG] No connection")
             print(f"[DEBUG] No connection")
     
-    
-    def stop_stream(self):
-        self.config["stream_stopped"] = not(self.config["stream_stopped"])
-        self.button_stop.setText("Старт" if self.config["stream_stopped"] else "Остановить")
-    
-    
     def connect(self, from_ui=True):
-        global scanner, scanner_image
+        global scanner
         
         (ip, port) = (None, None)
         (code1, message1) = (None, None)
         if from_ui:
             ip, port = self.line_scanner_ip.text().split(":")
             (code, message) = scanner.connect(ip, int(port))
-            (code1, message1) = scanner_image.connect(ip, int(port) + 1)
+            (code1, message1) = self.video_thread.connect(ip, int(port) + 1)
         else:
             ip, port = scanner.ip, int(scanner.port)
             self.line_scanner_ip.setText(f"{ip}:{port}")
             (code, message) = scanner.connect(ip, port)
-            (code1, message1) = scanner_image.connect(ip, port + 1)
+            (code1, message1) = self.video_thread.connect(ip, port + 1)
             
         if (code == 0) and (code1 == 0):
             self.config["scanner_connected"] = True
             self.listView_log.addItem(f"[DEBUG] Successfully connected to [{ip}:{port}]")
             
             scanner.stop_listening()
-            scanner_image.start_listening("get_image", lambda r: self.get_image(r), "GET_IMAGE\r", 0)
+            self.video_thread.start()
             scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 1)
             self.ratio_connect.click()
             # scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
@@ -132,11 +172,36 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.config["scanner_connected"] = False
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port}]: {message}")
             self.listView_log.addItem(f"[DEBUG] Failed to connect [{ip}:{port + 1}]: {message1}")
-
-    def get_image(self, r):
-        rc, data = r
-        print(f"[IMAGE]: ({rc}): {len(data)} bytes")
-        self.setImage(r[1])
+    
+    def setupVideo(self):
+        self.video_thread = VideoThread("", 0)
+        self.video_thread.signal.connect(self.update_image)
+        self.video_thread.start()
+        
+    @pyqtSlot(QImage)
+    def update_image(self, image):
+        if not(self.config["stream_stopped"]):
+            self.Frame.setPixmap(QPixmap.fromImage(image))
+            self.Frame.adjustSize()
+            if self.config["save_image"]:
+                self.save_image()
+                self.config["image_received"] = True
+        
+    def stop_stream(self):
+        self.config["stream_stopped"] = not(self.config["stream_stopped"])
+        self.button_stop.setText("Старт" if self.config["stream_stopped"] else "Остановить")
+    
+    def save_image(self):
+        date = datetime.now()
+        folder = self.config.get("save_path", "") if os.path.exists(self.config.get("save_path", "")) else ""
+        path = f"{folder}/image_{self.line_qr.text()}_{date.hour:02d}_{date.minute:02d}_{date.second:02d}.png"
+        self.Frame.pixmap().save(path)
+    
+    def wait_image(self):
+        self.config["image_received"] = False
+        self.config["save_image"] = True
+        while not(self.config["image_received"]):
+            continue
     
     def get_status(self, r):
         try:
@@ -156,22 +221,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             print("[STATUS]", r)
         except Exception as e:
             print('[STATUS]', e)
-    
-    def wait_image(self):
-        self.config["image_received"] = False
-        self.config["save_image"] = True
-        while not(self.config["image_received"]):
-            continue
 
     def Z_move(self, start, end, step):
         def task():
-            end = start - end
+            end2 = start - end
             self.wait_image()
-            for i in np.arange(min(start, end), max(start, end), step):
+            for i in np.arange(min(start, end2), max(start, end2), step):
                 self.command_execute(f"MOVE 0 0 {step}\r")
-                time.sleep(0.3)
                 self.wait_image()
-                    
             self.config["image_received"] = False
             self.config["save_image"] = False
         threading.Thread(target=task).run()
@@ -250,51 +307,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         msgBox.setWindowTitle("Ошибка")
         msgBox.exec()
     
-    
-    def save_image(self):
-        date = datetime.now()
-        folder = self.config.get("save_path", "") if os.path.exists(self.config.get("save_path", "")) else ""
-        path = f"{folder}/image_{self.line_qr.text()}_{date.hour:02d}_{date.minute:02d}_{date.second:02d}.png"
-        self.Frame.pixmap().save(path)
-    
-    
     @QtCore.pyqtSlot(str)
     def set_value(self, value):
         self.line_qr.setText(value)
-    
-    
-    @QtCore.pyqtSlot(bytes)
-    def setImage(self, data):
-        if not(self.config["stream_stopped"]):
-            print("Input size", len(data))
-            try:
-                debug_data = data.split(config.delimiter)
-                size = [int(x) for x in debug_data[0].decode().split('_')]
-                logging.debug(f"Image size: {size}")
-                print(f"Image size: {size}")
-                image = np.frombuffer(debug_data[1], dtype=np.uint32)
-                image = image.view(np.uint8).reshape(tuple(size) + (-1,))
-
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                image = cv2.rotate(image, cv2.ROTATE_180)
-            
-                h, w, ch = image.shape
-                bytesPerLine = ch * w
-                image = QtGui.QImage(image.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
-                
-                self.Frame.setPixmap(QPixmap.fromImage(image))
-                self.Frame.adjustSize()
-                if self.config["save_image"]:
-                    self.save_image()
-                    self.config["image_received"] = True
-            except Exception as e:
-                logging.error(e)
 
     def closeEvent(self, event):
         os._exit(0)
 
 if __name__ == "__main__":
-    global barcode_scanner, scanner, scanner_image, ie
+    global barcode_scanner, scanner, ie
     
     parser = argparse.ArgumentParser(prog='Web server application', usage='test.py [options]')
     parser.add_argument('--debug', type=bool, default=True, help='Run application in debug mode')
@@ -303,7 +324,6 @@ if __name__ == "__main__":
     args = vars(parser.parse_args())
     
     scanner = Scanner(ip=args["host"], port=args["port"])
-    scanner_image = Scanner(ip=args["host"], port=args["port"] + 1)
     barcode_scanner = Barcode_scanner()
     ie = Inference("data/model_v8l.pt")
     
@@ -313,4 +333,4 @@ if __name__ == "__main__":
     app.aboutToQuit.connect(lambda: os._exit(0))
     window = MainWindow()
     window.show()
-    sys.exit(app.exec_())
+    app.exec()
