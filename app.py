@@ -42,14 +42,23 @@ class VideoThread(QThread):
 
     def listener(self, data):
         try:
-            if len(data) > 0:
+            if len(data) >= 0:
+                print("[IMAGE] len(data):", len(data))
+
                 debug_data = data.split(config.delimiter)
-                size = [int(x) for x in debug_data[0].decode().split('_')]
+                
+                numbers = [float(x) for x in debug_data[0].decode().split('_')]
+                coords = [numbers[2], numbers[3], numbers[4]]
+                size = [int(numbers[0]), int(numbers[1])]
+                print("Motor status: moving {}, coords {}".format(size, coords))
+
+
                 image = np.frombuffer(debug_data[1], dtype=np.uint32)
                 image = image.view(np.uint8).reshape(tuple(size) + (-1,))
 
-                image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-                # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                bgr = image[..., :3]
+
+                image = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
                 image = cv2.rotate(image, cv2.ROTATE_180)
             
                 h, w, ch = image.shape
@@ -60,14 +69,15 @@ class VideoThread(QThread):
             print('[Video]', e)
         
     def run(self):
-        try:
-            # self.scanner.connect(self.ip, self.port)
-            self.stop = False
-            while not(self.stop):
+        self.stop = False
+        while not(self.stop):
+            try:
+                print(1)
                 code, data = self.scanner.send("GET_IMAGE\r", True)
+                print(2)
                 self.listener(data)
-        except Exception as e:
-            print(e)
+            except Exception as e:
+                print(e)
             
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -83,7 +93,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             "scanner_connected": False,
             "video_stream": False,
             "image_received": False,
-            "save_image": False
+            "save_image": False,
+            "save_path": "saved_data/"
         }
         
         self.initUi()
@@ -103,7 +114,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.connect(False)
         self.bar_signal.connect(self.set_value)
         
-        barcode_scanner.start_listening("bar1", lambda x: self.bar_signal.emit(str(x, encoding='utf-8')))
+        # barcode_scanner.start_listening("bar1", lambda x: self.bar_signal.emit(str(x, encoding='utf-8')))
         
         self.button_move_left.clicked.connect(lambda: self.command_execute(f"MOVE 0 -{self.spinbox_stepY.value()} 0\r"))
         self.button_move_right.clicked.connect(lambda: self.command_execute(f"MOVE 0 {self.spinbox_stepY.value()} 0\r"))
@@ -160,13 +171,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             (code, message) = scanner.connect(ip, port)
             (code1, message1) = self.video_thread.connect(ip, port + 1)
             
-        if (code == 0) and (code1 == 0):
+        if (code == 0):# and (code1 == 0):
             self.config["scanner_connected"] = True
             self.listView_log.addItem(f"[DEBUG] Successfully connected to [{ip}:{port}]")
             
             scanner.stop_listening()
+            print('video started')
             self.video_thread.start()
-            scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 1)
+            # scanner.start_listening("get_status", lambda r: self.get_status(r), "GET_STATUS\r", 1)
             self.ratio_connect.click()
             # scanner.start_listening("get_gamma", lambda r: print("[GAMMA]", r), "GET_GAMMA\rGET_RESOLUTION\r", 9)
         else:
@@ -200,7 +212,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def save_image(self):
         date = datetime.now()
         folder = self.config.get("save_path", "") if os.path.exists(self.config.get("save_path", "")) else ""
-        path = f"{folder}/image_{self.config.get('image_prefix', '')}_{self.line_qr.text()}_{date.hour:02d}_{date.minute:02d}_{date.second:02d}.png"
+        path = f"{folder}image_{self.config.get('image_prefix', '')}_{self.line_qr.text()}_{date.hour:02d}_{date.minute:02d}_{date.second:02d}.png"
+        print('save image:', path)
         self.Frame.pixmap().save(path)
     
     def wait_image(self):
@@ -245,8 +258,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         global ie
 
         self.Frame.pixmap().save("temp.png")
+        cv2.imwrite("temp.png", cv2.cvtColor(cv2.imread("temp.png"), cv2.COLOR_BGR2GRAY))
         image = cv2.cvtColor(cv2.imread("temp.png"), cv2.COLOR_BGR2RGB)
         preds = ie.predict("temp.png")
+        print('DETECTED', preds)
         for pred in preds:
             x1, y1, x2, y2 = int(pred[0]), int(pred[1]), int(pred[2]), int(pred[3])
             # cv2.putText(image, f"{pred[4]:.2%}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
@@ -254,10 +269,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         height, width, channel = image.shape
         bytesPerLine = channel * width
         
-        image = QtGui.QImage(image.data, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
+        image = QtGui.QImage(image.data, width, height, bytesPerLine, QtGui.QImage.Format.Format_RGB888)
         self.Frame.setPixmap(QPixmap.fromImage(image))
         self.Frame.adjustSize()
-        os.remove("temp.png")
+#        os.remove("temp.png")
     
     
     def select_file(self, key, filter, type='file', label_out=None):
@@ -279,11 +294,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     try:
                         x, y, z = map(float, line.split(','))
                         rc = self.command_execute(f"MOVE {x} {y} {z}\r", True)
+                        print(1)
                         if self.checkBox.isChecked():
+                            print(2)
                             self.config["image_prefix"] = str(idx + 1)
-                            QtTest.QTest.qWait(0.3)
+                            QtTest.QTest.qWait(5)
                             # QtTest.QTest.qWait((x + y + z) / 10)
                             self.wait_image()
+                            self.save_image()
                     except Exception as e:
                         print(e)
             elapsed = time.time() - start
@@ -321,10 +339,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 if __name__ == "__main__":
     global barcode_scanner, scanner, ie
-    
     parser = argparse.ArgumentParser(prog='Web server application', usage='test.py [options]')
     parser.add_argument('--debug', type=bool, default=True, help='Run application in debug mode')
-    parser.add_argument('--host', type=str, default="169.254.180.246", help='Host serialization')
+    parser.add_argument('--host', type=str, default="192.168.1.118", help='Host serialization')
     parser.add_argument('--port', type=int, default=6003, help='Port serialization')
     args = vars(parser.parse_args())
     

@@ -1,3 +1,3 @@
 start_bytes = b'start'
-end_bytes = b'end'
-delimiter = b'delimiter'
+end_bytes = b'ending'
+delimiter = b'delimeter'
