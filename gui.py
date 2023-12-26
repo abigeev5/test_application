@@ -372,6 +372,8 @@ class Ui_MainWindow(object):
         self.tab_autofocus.setObjectName("tab_autofocus")
         self.horizontalLayout_11 = QtWidgets.QHBoxLayout(self.tab_autofocus)
         self.horizontalLayout_11.setObjectName("horizontalLayout_11")
+        self.autofocus_run = QtWidgets.QPushButton(parent=self.tab_autofocus)
+        self.horizontalLayout_11.addWidget(self.autofocus_run)
         self.tabWidget.addTab(self.tab_autofocus, "")
         self.tab_traject = QtWidgets.QWidget()
         self.tab_traject.setObjectName("tab_traject")

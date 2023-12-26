@@ -43,14 +43,14 @@ class VideoThread(QThread):
     def listener(self, data):
         try:
             if len(data) >= 0:
-                print("[IMAGE] len(data):", len(data))
+                # print("[IMAGE] len(data):", len(data))
 
                 debug_data = data.split(config.delimiter)
                 
                 numbers = [float(x) for x in debug_data[0].decode().split('_')]
                 coords = [numbers[2], numbers[3], numbers[4]]
                 size = [int(numbers[0]), int(numbers[1])]
-                print("Motor status: moving {}, coords {}".format(size, coords))
+                # print("Motor status: moving {}, coords {}".format(size, coords))
 
 
                 image = np.frombuffer(debug_data[1], dtype=np.uint32)
@@ -66,15 +66,13 @@ class VideoThread(QThread):
                 self.image = QImage(image.data, w, h, bytesPerLine, QImage.Format.Format_RGB888).copy()
                 self.signal.emit(self.image)
         except Exception as e:
-            print('[Video]', e)
+            print('[ERROR Video]', e)
         
     def run(self):
         self.stop = False
         while not(self.stop):
             try:
-                print(1)
                 code, data = self.scanner.send("GET_IMAGE\r", True)
-                print(2)
                 self.listener(data)
             except Exception as e:
                 print(e)
@@ -135,6 +133,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         self.button_move_up_Z.clicked.connect(lambda: self.command_execute(f"MOVE 0 0 -{self.spinbox_move_up_Z.value()}\r"))
         self.button_move_down_Z.clicked.connect(lambda: self.Z_move(self.spinbox_current_Z.value(), self.spinbox_move_down_Z.value(), self.spinbox_step.value()))
+        self.autofocus_run.clicked.connect(self.autofocus)
             
     def command_execute(self, command, wait=False):
         global scanner
@@ -220,7 +219,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.config["image_received"] = False
         self.config["save_image"] = True
         while not(self.config["image_received"]):
-            QtTest.QTest.qWait(0.01)
+            QtTest.QTest.qWait(1)
     
     def get_status(self, r):
         try:
@@ -312,7 +311,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.config["image_received"] = False
         self.config["save_image"] = False
     
-    
+    def autofocus(self):
+        start = time.time()
+        data = []
+        start, end, step = 70, 100, 5
+        rc = self.command_execute(f"MOVE 0 0 -150\r", True)
+        #Fast
+        rc = self.command_execute(f"MOVE 0 0 {start}\r", True)
+        for z_pos in range(start, end + step, step):
+            try:
+                rc = self.command_execute(f"MOVE 0 0 {step}\r", True)
+                self.wait_image()
+                self.Frame.pixmap().save('tmp.png')
+                image = cv2.imread('tmp.png')
+                res = cv2.Laplacian(image, cv2.CV_64F).var()
+                data.append((z_pos, res))
+                print(f"Z [{z_pos}]: {res}")
+
+            except Exception as e:
+                print('[ERROR]', e)
+        elapsed = time.time() - start
+        mx = max(data, key=lambda x: x[1])
+        rc = self.command_execute(f"MOVE 0 0 -{end - mx[0]}\r", True)
+        print("Autofocus elapsed:", elapsed)
+        print("Max:", mx)
+        for i in data:
+            print(i[0], i[1])
+        self.config["image_received"] = False
+        self.config["save_image"] = False
+
     def update_settings(self):
         self.command_execute("SET_GAMMA {}\r".format(int(self.spinbox_gamma.value())))
         self.command_execute("SET_BRIGHTNESS {}\r".format(int(self.spinbox_brightness.value())))
